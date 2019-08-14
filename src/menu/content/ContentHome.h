@@ -20,8 +20,10 @@
 #include "gui/Gui.h"
 #include "ContentTemplate.h"
 #include "language/gettext.h"
-#include "plugin/PluginInformation.h"
 #include "custom/gui/DefaultGuiSwitch.h"
+#include "plugin/PluginInformation.h"
+#include "plugin/PluginLoader.h"
+
 
 class ContentHome : public ContentTemplate {
 public:
@@ -66,6 +68,7 @@ private:
     GuiButton DPADButtons;
 
     GuiFrame pluginsFrame;
+    PluginLoader * loader = NULL;
 
     std::vector<GuiElement*> toDelete;
     void OnDPADClick(GuiButton *button, const GuiController *controller, GuiTrigger *trigger);

@@ -1,5 +1,5 @@
 /****************************************************************************
- * Copyright (C) 2018,2019 Maschell
+ * Copyright (C) 2015 Dimok
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,21 +14,31 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  ****************************************************************************/
+#ifndef _GETTEXT_H_
+#define _GETTEXT_H_
 
-#ifndef _MAIN_H_
-#define _MAIN_H_
+#include <wut_types.h>
 
-#include <stdint.h>
-/* Main */
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-//! C wrapper for our C++ functions
-int32_t Menu_Main(int32_t argc, char **argv);
+#define tr(s) gettext(s)
+#define trNOOP(s) s
+
+BOOL gettextLoadLanguage(const char* langFile);
+void gettextCleanUp(void);
+/*
+ * input msg = a text in ASCII
+ * output = the translated msg in utf-8
+ */
+const char *gettext(const char *msg);
+#define tr(s) gettext(s)
+#define trNOOP(s)   s
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif /* _GETTEXT_H_ */

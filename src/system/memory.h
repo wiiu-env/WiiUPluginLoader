@@ -1,5 +1,5 @@
 /****************************************************************************
- * Copyright (C) 2018,2019 Maschell
+ * Copyright (C) 2015 Dimok
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,21 +14,29 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  ****************************************************************************/
+#ifndef __MEMORY_H_
+#define __MEMORY_H_
 
-#ifndef _MAIN_H_
-#define _MAIN_H_
-
-#include <stdint.h>
-/* Main */
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-//! C wrapper for our C++ functions
-int32_t Menu_Main(int32_t argc, char **argv);
+#include <malloc.h>
+
+void memoryInitialize(void);
+void memoryRelease(void);
+
+void * MEM2_alloc(unsigned int size, unsigned int align);
+void MEM2_free(void *ptr);
+
+void * MEM1_alloc(unsigned int size, unsigned int align);
+void MEM1_free(void *ptr);
+
+void * MEMBucket_alloc(unsigned int size, unsigned int align);
+void MEMBucket_free(void *ptr);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif // __MEMORY_H_

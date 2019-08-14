@@ -17,41 +17,46 @@
  ****************************************************************************/
 #include "Application.h"
 #include "common/common.h"
-#include <dynamic_libs/os_functions.h>
+#include <coreinit/core.h>
+#include <coreinit/foreground.h>
+#include <proc_ui/procui.h>
+#include <sysapp/launch.h>
 #include <gui/FreeTypeGX.h>
 #include <gui/VPadController.h>
 #include <gui/WPadController.h>
+#include "system/memory.h"
 #include "resources/Resources.h"
-#include <sounds/SoundHandler.hpp>
+#include <gui/sounds/SoundHandler.hpp>
 #include <utils/logger.h>
 #include "settings/CSettings.h"
-#include "myutils/TcpReceiver.h"
-#include "mymemory/memory_mapping.h"
+#include "utils/TcpReceiver.h"
 
 Application *Application::applicationInstance = NULL;
 bool Application::exitApplication = false;
+bool Application::quitRequest = false;
 
 Application::Application()
     : CThread(CThread::eAttributeAffCore1 | CThread::eAttributePinnedAff, 0, 0x20000)
     , bgMusic(NULL)
     , video(NULL)
     , mainWindow(NULL)
-    , exitCode(EXIT_RELAUNCH_ON_LOAD) {
+    , fontSystem(NULL)
+    , exitCode(0) {
     controller[0] = new VPadController(GuiTrigger::CHANNEL_1);
     controller[1] = new WPadController(GuiTrigger::CHANNEL_2);
     controller[2] = new WPadController(GuiTrigger::CHANNEL_3);
     controller[3] = new WPadController(GuiTrigger::CHANNEL_4);
     controller[4] = new WPadController(GuiTrigger::CHANNEL_5);
 
-    CSettings::instance()->Load();
-
     //! create bgMusic
     bgMusic = new GuiSound(Resources::GetFile("bgMusic.mp3"), Resources::GetFileSize("bgMusic.mp3"));
-
-    //! load language
-    loadLanguageFromConfig();
+    bgMusic->SetLoop(true);
+    bgMusic->Play();
+    bgMusic->SetVolume(50);
 
     exitApplication = false;
+
+    ProcUIInit(OSSavesDone_ReadyToRelease);
 }
 
 Application::~Application() {
@@ -70,7 +75,7 @@ Application::~Application() {
         AsyncDeleter::triggerDeleteProcess();
         while(!AsyncDeleter::realListEmpty()) {
             DEBUG_FUNCTION_LINE("Waiting...\n");
-            os_usleep(1000);
+            OSSleepTicks(OSMicrosecondsToTicks(1000));
         }
     } while(!AsyncDeleter::deleteListEmpty());
     AsyncDeleter::destroyInstance();
@@ -80,6 +85,8 @@ Application::~Application() {
 
     DEBUG_FUNCTION_LINE("Stop sound handler\n");
     SoundHandler::DestroyInstance();
+
+    ProcUIShutdown();
 }
 
 int32_t Application::exec() {
@@ -91,15 +98,12 @@ int32_t Application::exec() {
     return exitCode;
 }
 
-void Application::reloadUI() {
-    reloadUIflag = true;
-}
 void Application::fadeOut() {
     GuiImage fadeOut(video->getTvWidth(), video->getTvHeight(), (GX2Color) {
         0, 0, 0, 255
     });
 
-    for(int32_t i = 0; i < 255; i += 10) {
+    for(int i = 0; i < 255; i += 10) {
         if(i > 255)
             i = 255;
 
@@ -109,9 +113,9 @@ void Application::fadeOut() {
         video->prepareDrcRendering();
         mainWindow->drawDrc(video);
 
-        GX2SetDepthOnlyControl(GX2_DISABLE, GX2_DISABLE, GX2_COMPARE_ALWAYS);
+        GX2SetDepthOnlyControl(GX2_DISABLE, GX2_DISABLE, GX2_COMPARE_FUNC_ALWAYS);
         fadeOut.draw(video);
-        GX2SetDepthOnlyControl(GX2_ENABLE, GX2_ENABLE, GX2_COMPARE_LEQUAL);
+        GX2SetDepthOnlyControl(GX2_ENABLE, GX2_ENABLE, GX2_COMPARE_FUNC_LEQUAL);
 
         video->drcDrawDone();
 
@@ -120,9 +124,9 @@ void Application::fadeOut() {
 
         mainWindow->drawTv(video);
 
-        GX2SetDepthOnlyControl(GX2_DISABLE, GX2_DISABLE, GX2_COMPARE_ALWAYS);
+        GX2SetDepthOnlyControl(GX2_DISABLE, GX2_DISABLE, GX2_COMPARE_FUNC_ALWAYS);
         fadeOut.draw(video);
-        GX2SetDepthOnlyControl(GX2_ENABLE, GX2_ENABLE, GX2_COMPARE_LEQUAL);
+        GX2SetDepthOnlyControl(GX2_ENABLE, GX2_ENABLE, GX2_COMPARE_FUNC_LEQUAL);
 
         video->tvDrawDone();
 
@@ -142,109 +146,151 @@ void Application::fadeOut() {
     video->drcEnable(false);
 }
 
-void Application::executeThread(void) {
-    DEBUG_FUNCTION_LINE("Initialize video\n");
-    video = new CVideo(GX2_TV_SCAN_MODE_720P, GX2_DRC_SINGLE);
+bool Application::procUI(void) {
+    bool executeProcess = false;
 
-    DEBUG_FUNCTION_LINE("Video size %i x %i\n", video->getTvWidth(), video->getTvHeight());
-
-    //! setup default Font
-    DEBUG_FUNCTION_LINE("Initialize main font system\n");
-    FreeTypeGX *fontSystem = new FreeTypeGX(Resources::GetFile("font.ttf"), Resources::GetFileSize("font.ttf"), true);
-    GuiText::setPresetFont(fontSystem);
-
-    reloadUIflag = true;
-    if(bgMusic != NULL) {
-        bgMusic->SetLoop(true);
-        bgMusic->SetVolume(50);
-        bgMusic->Stop(); //CHANG MEEEEEEEEEEEEEEEEEEE
+    switch(ProcUIProcessMessages(true)) {
+    case PROCUI_STATUS_EXITING: {
+        DEBUG_FUNCTION_LINE("PROCUI_STATUS_EXITING\n");
+        exitCode = EXIT_SUCCESS;
+        exitApplication = true;
+        break;
     }
+    case PROCUI_STATUS_RELEASE_FOREGROUND: {
+        DEBUG_FUNCTION_LINE("PROCUI_STATUS_RELEASE_FOREGROUND\n");
+        if(video != NULL) {
+            // we can turn of the screen but we don't need to and it will display the last image
+            video->tvEnable(true);
+            video->drcEnable(true);
 
+            DEBUG_FUNCTION_LINE("delete fontSystem\n");
+            delete fontSystem;
+            fontSystem = NULL;
 
-    while(reloadUIflag) {
-        reloadUIflag = false;
-        exitCode = EXIT_RELAUNCH_ON_LOAD;
-        DEBUG_FUNCTION_LINE("Initialize the language\n");
-        loadLanguageFromConfig();
-        DEBUG_FUNCTION_LINE("Initialize main window\n");
-        mainWindow = MainWindow::getInstance(video->getTvWidth(), video->getTvHeight());
+            DEBUG_FUNCTION_LINE("delete video\n");
+            delete video;
+            video = NULL;
 
-        exitApplication = false;
-        //! main GX2 loop (60 Hz cycle with max priority on core 1)
-
-        DEBUG_FUNCTION_LINE("Starting TcpReceiver\n");
-        TcpReceiver pluginReceiver(4299);
-        DEBUG_FUNCTION_LINE("Entering main loop\n");
-        while(!exitApplication && !reloadUIflag) {
-            //! Read out inputs
-            for(int32_t i = 0; i < 5; i++) {
-                if(controller[i]->update(video->getTvWidth(), video->getTvHeight()) == false)
-                    continue;
-
-                if(controller[i]->data.buttons_d & VPAD_BUTTON_PLUS) {
-                    exitCode = APPLICATION_CLOSE_APPLY;
-                    if(linkPluginsCallback != NULL) {
-                        bool result = linkPluginsCallback();
-                        if(!result) {
-                            // On linking errors return to the HBL.
-#warning TODO: proper error handling when linking fails.
-                            exitCode = APPLICATION_CLOSE_MIIMAKER;
-                        }
-                    }
-                    exitApplication = true;
-                }
-
-                if(controller[i]->data.buttons_d & VPAD_BUTTON_MINUS) {
-                    exitCode = APPLICATION_CLOSE_APPLY_MEMORY;
-                    exitApplication = true;
-                }
-
-                if(controller[i]->data.buttons_d & VPAD_BUTTON_HOME) {
-                    exitCode = APPLICATION_CLOSE_MIIMAKER;
-                    exitApplication = true;
-                }
-
-                //! update controller states
-                mainWindow->update(controller[i]);
-            }
-            mainWindow->process();
-
-            //! start rendering DRC
-            video->prepareDrcRendering();
-            mainWindow->drawDrc(video);
-            video->drcDrawDone();
-
-            //! start rendering TV
-            video->prepareTvRendering();
-            mainWindow->drawTv(video);
-            video->tvDrawDone();
-
-            //! enable screen after first frame render
-            if(video->getFrameCount() == 0) {
-                video->tvEnable(true);
-                video->drcEnable(true);
-            }
-
-
-            //! as last point update the effects as it can drop elements
-            mainWindow->updateEffects();
-
-            video->waitForVSync();
-
-            //! transfer elements to real delete list here after all processes are finished
-            //! the elements are transfered to another list to delete the elements in a separate thread
-            //! and avoid blocking the GUI thread
-            AsyncDeleter::triggerDeleteProcess();
+            DEBUG_FUNCTION_LINE("deinitialze memory\n");
+            memoryRelease();
+            ProcUIDrawDoneRelease();
+        } else {
+            ProcUIDrawDoneRelease();
         }
-        DEBUG_FUNCTION_LINE("Fading out\n");
-        fadeOut();
-        DEBUG_FUNCTION_LINE("Destroying the MainWindow\n");
-        MainWindow::destroyInstance();
+        break;
     }
-    DEBUG_FUNCTION_LINE("Delete fontSystem\n");
+    case PROCUI_STATUS_IN_FOREGROUND: {
+        if(!quitRequest) {
+            if(video == NULL) {
+                DEBUG_FUNCTION_LINE("PROCUI_STATUS_IN_FOREGROUND\n");
+                DEBUG_FUNCTION_LINE("initialze memory\n");
+                memoryInitialize();
+
+                DEBUG_FUNCTION_LINE("Initialize video\n");
+                video = new CVideo(GX2_TV_SCAN_MODE_720P, GX2_DRC_RENDER_MODE_SINGLE);
+                DEBUG_FUNCTION_LINE("Video size %i x %i\n", video->getTvWidth(), video->getTvHeight());
+
+                //! setup default Font
+                DEBUG_FUNCTION_LINE("Initialize main font system\n");
+                FreeTypeGX *fontSystem = new FreeTypeGX(Resources::GetFile("font.ttf"), Resources::GetFileSize("font.ttf"), true);
+                GuiText::setPresetFont(fontSystem);
+
+                if(mainWindow == NULL) {
+                    DEBUG_FUNCTION_LINE("Initialize main window\n");
+                    Application::loadLanguageFromConfig();
+                    mainWindow = MainWindow::getInstance(video->getTvWidth(), video->getTvHeight());
+                }
+
+            }
+            executeProcess = true;
+        }
+        break;
+    }
+    case PROCUI_STATUS_IN_BACKGROUND:
+    default:
+        break;
+    }
+
+    return executeProcess;
+}
+
+void Application::executeThread(void) {
+    DEBUG_FUNCTION_LINE("Entering main loop\n");
+
+    //! main GX2 loop (60 Hz cycle with max priority on core 1)
+    while(!exitApplication) {
+        if(procUI() == false)
+            continue;
+
+        //! Read out inputs
+        for(int i = 0; i < 5; i++) {
+            if(controller[i]->update(video->getTvWidth(), video->getTvHeight()) == false)
+                continue;
+
+            if(controller[i]->data.buttons_d & VPAD_BUTTON_PLUS) {
+                if(linkPluginsCallback != NULL) {
+                    bool result = linkPluginsCallback();
+                    if(!result) {
+                        // On linking errors return to the HBL.
+#warning TODO: proper error handling when linking fails.
+                    }
+                }
+                SYSLaunchMenu();
+                //quit(0);
+            }
+
+            //! update controller states
+            mainWindow->update(controller[i]);
+        }
+
+        mainWindow->process();
+
+        //! start rendering DRC
+        video->prepareDrcRendering();
+        mainWindow->drawDrc(video);
+        video->drcDrawDone();
+
+        //! start rendering TV
+        video->prepareTvRendering();
+        mainWindow->drawTv(video);
+        video->tvDrawDone();
+
+        //! enable screen after first frame render
+        if(video->getFrameCount() == 0) {
+            video->tvEnable(true);
+            video->drcEnable(true);
+        }
+
+        //! as last point update the effects as it can drop elements
+        mainWindow->updateEffects();
+
+        video->waitForVSync();
+
+        //! transfer elements to real delete list here after all processes are finished
+        //! the elements are transfered to another list to delete the elements in a separate thread
+        //! and avoid blocking the GUI thread
+        AsyncDeleter::triggerDeleteProcess();
+    }
+
+    //! in case we exit to a homebrew let's smoothly fade out
+    if(video) {
+        fadeOut();
+    }
+
+    DEBUG_FUNCTION_LINE("delete mainWindow\n");
+    MainWindow::destroyInstance();
+    mainWindow = NULL;
+
+    DEBUG_FUNCTION_LINE("delete fontSystem\n");
     delete fontSystem;
-    DEBUG_FUNCTION_LINE("Delete video\n");
+    fontSystem = NULL;
+
+    DEBUG_FUNCTION_LINE("delete video\n");
     delete video;
+    video = NULL;
+
+    DEBUG_FUNCTION_LINE("deinitialze memory\n");
+    memoryRelease();
 }
 
 void Application::loadLanguageFromConfig() {

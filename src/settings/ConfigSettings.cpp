@@ -208,7 +208,7 @@ bool ConfigSettings::Save(bool force) {
     std::string filepath = configPath + "/";
     filepath += fileName;
 
-    s32 res = open(filepath.c_str(), O_CREAT | O_TRUNC | O_WRONLY);
+    int32_t res = open(filepath.c_str(), O_CREAT | O_TRUNC | O_WRONLY);
     close(res);
 
     CFile file(filepath, CFile::WriteOnly);

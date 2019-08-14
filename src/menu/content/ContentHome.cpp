@@ -16,9 +16,9 @@
  ****************************************************************************/
 #include "common/common.h"
 #include "ContentHome.h"
-#include "plugin/PluginLoader.h"
 #include "custom/gui/DefaultGuiSwitch.h"
 #include "Application.h"
+#include "plugin/PluginLoader.h"
 
 ContentHome::ContentHome():ContentTemplate()
     , welcomeHeadLineLabel(gettext("Welcome to the Wii U plugin loader"))
@@ -89,8 +89,13 @@ ContentHome::ContentHome():ContentTemplate()
     DPADButtons.clicked.connect(this, &ContentHome::OnDPADClick);
     append(&DPADButtons);
 
-    PluginLoader * pluginLoader  = PluginLoader::getInstance();
-    std::vector<PluginInformation *> pluginList = pluginLoader->getPluginInformation(WUPS_PLUGIN_PATH);
+    PluginLoader * pluginLoader = PluginLoader::createInstance(0x00A00000, 0x01000000);
+
+    std::vector<PluginInformation *> pluginList = pluginLoader->getPluginsByPath(WUPS_PLUGIN_PATH);
+    std::vector<PluginInformation *> autoboot_list =  pluginLoader->getPluginsByPath("sd:/wiiu/autoboot_plugins/");
+
+    pluginList.insert(pluginList.end(), autoboot_list.begin(), autoboot_list.end());
+
     std::vector<PluginInformation *> pluginListLoaded = pluginLoader->getPluginsLoadedInMemory();
 
     pluginsFrame.setAlignment(ALIGN_TOP_CENTER);
@@ -102,6 +107,7 @@ ContentHome::ContentHome():ContentTemplate()
     float frameheight = 50.0f;
     int32_t selectionMappingIndex = 0;
     selectionMappingMin = 0;
+
     for (std::vector<PluginInformation *>::iterator it = pluginList.begin() ; it != pluginList.end(); ++it) {
         PluginInformation * curPlugin = *it;
 
@@ -155,11 +161,13 @@ ContentHome::ContentHome():ContentTemplate()
         toDelete.push_back(right);
         toDelete.push_back(text);
     }
+
     selectionMappingMax = selectionMapping.size() -1;
     if(selectionMappingMax < 0) {
         selectionMappingMax = 0;
     }
 
+    //pluginLoader->clearPluginInformation(pluginList); // will be cleared in destructor.
     pluginLoader->clearPluginInformation(pluginListLoaded);
 
     append(&welcomeHeadLineLabel);
@@ -172,6 +180,7 @@ ContentHome::ContentHome():ContentTemplate()
 
     auto fp = std::bind(&ContentHome::linkPlugins, this);
     Application::instance()->setLinkPluginsCallback(fp);
+    this->loader = pluginLoader;
 }
 
 void ContentHome::OnDPADClick(GuiButton *button, const GuiController *controller, GuiTrigger *trigger) {
@@ -220,12 +229,17 @@ bool ContentHome::linkPlugins() {
         GuiToggle * guiElement = x.first;
         if(guiElement->getValue()) {
             PluginInformation* pluginInformation = x.second;
-            DEBUG_FUNCTION_LINE("We want to link %s\n",pluginInformation->getName().c_str());
+            //DEBUG_FUNCTION_LINE("We want to link %s\n",pluginInformation->getName().c_str());
             willBeLoaded.push_back(pluginInformation);
         }
     }
+    if(loader != NULL) {
 
-    return PluginLoader::getInstance()->loadAndLinkPlugins(willBeLoaded);
+        return this->loader->loadAndLinkPlugins(willBeLoaded);
+
+    }
+    return false;
+
 }
 
 
@@ -267,5 +281,8 @@ ContentHome::~ContentHome() {
     Resources::RemoveSound(buttonClickSound);
     for (std::vector<GuiElement *>::iterator it = toDelete.begin() ; it != toDelete.end(); ++it) {
         delete *it;
+    }
+    if(loader != NULL) {
+        delete loader;
     }
 }

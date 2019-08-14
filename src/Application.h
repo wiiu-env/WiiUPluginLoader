@@ -20,8 +20,9 @@
 
 #include "menu/MainWindow.h"
 #include <functional>
-#include <video/CVideo.h>
+#include <gui/video/CVideo.h>
 #include <system/CThread.h>
+#include "utils/logger.h"
 #include <language/gettext.h>
 
 #define APPLICATION_CLOSE_APPLY             1
@@ -61,6 +62,7 @@ public:
     void quit(int32_t code) {
         exitCode = code;
         exitApplication = true;
+        quitRequest = true;
     }
 
     void setLinkPluginsCallback(std::function<bool(void)> fun) {
@@ -69,23 +71,24 @@ public:
     }
 private:
     Application();
-
     virtual ~Application();
+
+    bool procUI(void);
 
     static Application *applicationInstance;
     static bool exitApplication;
+    static bool quitRequest;
 
     void executeThread(void);
 
     void loadLanguageFromConfig();
 
-    bool reloadUIflag = false;
-
     GuiSound *bgMusic;
     CVideo *video;
     MainWindow *mainWindow;
+    FreeTypeGX *fontSystem;
     GuiController *controller[5];
-    int32_t exitCode;
+    int exitCode;
     std::function<bool(void)> linkPluginsCallback = NULL;
 };
 

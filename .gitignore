@@ -1,12 +1,6 @@
-build/*
-*.cbp
+build/
+*.rpx
 *.elf
-*.cscope_file_list
-*.layout
-screenshots/*
-release/*
-*.mod
-*.id*
-*.nam
-*.til
-*.layout
+*.exe
+src/resources/filelist.h
+*.cbp

@@ -3,7 +3,7 @@
 # Automatic resource file list generation
 # Created by Dimok
 
-outFile="./src/resources/filelist.cpp"
+outFile="./src/resources/filelist.h"
 count_old=$(cat $outFile 2>/dev/null | tr -d '\n\n' | sed 's/[^0-9]*\([0-9]*\).*/\1/')
 
 count=0
@@ -29,18 +29,27 @@ fi
 if [ "$count_old" != "$count" ] || [ ! -f $outFile ]
 then
 
-echo "Generating filelist.c for $count files." >&2
+echo "Generating filelist.h for $count files." >&2
 cat <<EOF > $outFile
 /****************************************************************************
- * Resource files.
+ * Loadiine resource files.
  * This file is generated automatically.
  * Includes $count files.
  *
  * NOTE:
  * Any manual modification of this file will be overwriten by the generation.
- *****************************************************************************/
-#include <resources/filelist.h>
-#include <stdint.h>
+ ****************************************************************************/
+#ifndef _FILELIST_H_
+#define _FILELIST_H_
+
+typedef struct _RecourceFile
+{
+	const char          *filename;
+	const unsigned char *DefaultFile;
+	const unsigned int  &DefaultFileSize;
+	unsigned char	    *CustomFile;
+	unsigned int        CustomFileSize;
+} RecourceFile;
 
 EOF
 
@@ -48,12 +57,12 @@ for i in ${files[@]}
 do
 	filename=${i%.*}
 	extension=${i##*.}
-	echo 'extern const uint8_t '$filename'_'$extension'[];' >> $outFile
-	echo 'extern const uint32_t '$filename'_'$extension'_size;' >> $outFile
+	echo 'extern const unsigned char '$filename'_'$extension'[];' >> $outFile
+	echo 'extern const unsigned int '$filename'_'$extension'_size;' >> $outFile
 	echo '' >> $outFile
 done
 
-echo 'static ResourceFile ResourceList[] =' >> $outFile
+echo 'static RecourceFile RecourceList[] =' >> $outFile
 echo '{' >> $outFile
 
 for i in ${files[@]}
@@ -65,7 +74,8 @@ done
 
 echo -e '\t{NULL, NULL, 0, NULL, 0}' >> $outFile
 echo '};' >> $outFile
+
 echo '' >> $outFile
-echo 'ResourceFile * getResourceList(){ return ResourceList; }' >> $outFile
-echo '' >> $outFile
+echo '#endif' >> $outFile
+
 fi

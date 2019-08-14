@@ -28,39 +28,20 @@
 
 #include <string>
 #include <vector>
-#include "FunctionData.h"
-#include "HookData.h"
-#include <utils/logger.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include <libelf.h>
-
-#ifdef __cplusplus
-}
-#endif
+#include "utils/logger.h"
+#include "utils/ipcclient.h"
 
 class PluginInformation {
 public:
-    /**
+    PluginInformation(plugin_information_handle handle, const char * path,  const char * name,  const char * author) {
+        this->handle = handle;
+        this->path = path;
+        this->name = name;
+        this->author = author;
+    }
 
-    returns PluginInformation* if a valid plugin was found at the given path. Otherwise returns NULL
-    **/
-    static PluginInformation * loadPluginInformation(std::string path) {
-        if(PluginInformation::checkFileExtenstion(path.c_str())) {
-            DEBUG_FUNCTION_LINE("Checkfile successfully, loading now Plugin Information\n");
-            PluginInformation * pluginInformation = new PluginInformation(path);
-            if(pluginInformation->openAndParseElf()) {
-                return pluginInformation;
-            } else {
-                delete pluginInformation;
-                return NULL;
-            }
-        } else {
-            return NULL;
-        }
+    ~PluginInformation() {
+        IPC_Delete_Plugin_Information(this->handle);
     }
 
     std::string getName() {
@@ -94,19 +75,11 @@ public:
     size_t getSize() {
         return this->size;
     }
+
+    plugin_information_handle getHandle() {
+        return this->handle;
+    }
 private:
-    PluginInformation(std::string path) {
-        this->path = path;
-    }
-
-    void setName(const char * name) {
-        this->name = name;
-    }
-
-    void setAuthor(const char * author) {
-        this->author = author;
-    }
-
     void setVersion(const char * version) {
         this->version = version;
     }
@@ -127,15 +100,7 @@ private:
         this->size = size;
     }
 
-    static bool checkFileExtenstion(const char * path);
-
-    bool openAndParseElf();
-
-    bool parseElf(Elf *elf);
-
-    bool metadataRead(Elf *elf, Elf32_Sym *symtab, size_t symtab_count, size_t symtab_strndx);
-
-    bool loadedSuccessfully = false;
+    plugin_information_handle handle;
 
     std::string path;
     std::string name;
@@ -144,7 +109,8 @@ private:
     std::string license;
     std::string buildtimestamp;
     std::string description;
-    size_t size;
+
+    size_t size = 0;
 };
 
 
