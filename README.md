@@ -10,6 +10,8 @@ Plugins needs to be placed into the following folder:
 sd:/wiiu/plugins
 ```
 
+Requires the [WiiUPluginSystemBackend](https://github.com/wiiu-env/WiiUPluginLoaderBackend) to be run in the background.
+
 ## Building
 Make sure you have [wut](https://github.com/devkitPro/wut/) installed.
 
