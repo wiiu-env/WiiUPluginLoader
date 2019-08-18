@@ -1,14 +1,9 @@
-﻿# Wii U Plugin Loader
-This is the GUI for the [WiiUPluginSystem](https://github.com/Maschell/WiiUPluginSystem).
+﻿# Wii U Plugin Loader GUI
+This is the GUI for the [WiiUPluginSystem](https://github.com/Maschell/WiiUPluginSystem). Check out the readme for more information about the Plugin System.
 
 ## Usage
 
-Use the "Wii U Plugin Loader" to load plugins from the sd card. It is built to be loaded through the homebrew launcher, which can be either loaded with the browser exploit or haxchi.
-Plugins needs to be placed into the following folder:
-
-```
-sd:/wiiu/plugins
-```
+Load the RPX file using the [Homebrew Launcher](https://github.com/wiiu-env/homebrew_launcher) and control which plugins should be enabled.
 
 Requires the [WiiUPluginSystemBackend](https://github.com/wiiu-env/WiiUPluginLoaderBackend) to be run in the background.
 
